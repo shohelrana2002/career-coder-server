@@ -18,6 +18,7 @@ const client = new MongoClient(uri, {
   },
 });
 const jobsCollection = client.db("CareerCoders").collection("jobs");
+const appliedCollection = client.db("CareerCoders").collection("applied");
 async function run() {
   try {
     await client.connect();
@@ -45,6 +46,20 @@ async function run() {
       } catch (err) {
         res.status(500).json({ message: "Data not found", error: err.message });
       }
+    });
+
+    // applied post by id
+    app.post("/applied/:id", async (req, res) => {
+      const id = req.params.id;
+      const data = req.body;
+      const jobData = {
+        jobId: id,
+        ...data,
+        appliedAt: new Date(),
+      };
+      const result = await appliedCollection.insertOne(jobData);
+      console.log(result);
+      res.send(result);
     });
   } finally {
     // await client.close();
