@@ -47,18 +47,75 @@ async function run() {
         res.status(500).json({ message: "Data not found", error: err.message });
       }
     });
+    // // applied get
+    // app.get("/application", async (req, res) => {
+    //   const email = req.query.email;
+    //   const query = { email };
+    //   const result = await appliedCollection.find(query).toArray();
+    //   // bad way to get id
+    //   for (const application of result) {
+    //     const jobId = application.jobId;
+    //     const queryJobId = { _id: new ObjectId(jobId) };
+    //     const job = await jobsCollection.findOne(queryJobId);
+    //     application.company = job.company;
+    //     application.title = job.title;
+    //     application.company_logo = job.company_logo;
+    //   }
+    //   res.send(result);
+    // });
 
+    app.get("/application", async (req, res) => {
+      const email = req.query.email;
+      const match = email ? { $match: { email } } : { $match: {} };
+      const pipeline = [
+        match,
+        {
+          $addFields: {
+            jobObjId: { $toObjectId: "$jobId" },
+          },
+        },
+        {
+          $lookup: {
+            from: "jobs",
+            localField: "jobObjId",
+            foreignField: "_id",
+            as: "job",
+          },
+        },
+        {
+          $unwind: { path: "$job", preserveNullAndEmptyArrays: true },
+        },
+        {
+          $project: {
+            jobId: 1,
+            email: 1,
+            company: "$job.company",
+            title: "$job.title",
+            company_logo: "$job.company_logo",
+          },
+        },
+      ];
+      const result = await appliedCollection.aggregate(pipeline).toArray();
+      res.send(result);
+    });
     // applied post by id
-    app.post("/applied/:id", async (req, res) => {
-      const id = req.params.id;
+    app.post("/applied", async (req, res) => {
+      // const id = req.params.id;
       const data = req.body;
-      const jobData = {
-        jobId: id,
-        ...data,
-        appliedAt: new Date(),
-      };
-      const result = await appliedCollection.insertOne(jobData);
+      // const jobData = {
+      //   jobId: id,
+      //   ...data,
+      //   appliedAt: new Date(),
+      // };
+      const result = await appliedCollection.insertOne(data);
       console.log(result);
+      res.send(result);
+    });
+    // application delete by id
+    app.delete("/application/:id", async (req, res) => {
+      const id = req.params.id;
+      const queryId = { _id: new ObjectId(id) };
+      const result = await appliedCollection.deleteOne(queryId);
       res.send(result);
     });
   } finally {
