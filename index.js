@@ -100,13 +100,7 @@ async function run() {
     });
     // applied post by id
     app.post("/applied", async (req, res) => {
-      // const id = req.params.id;
       const data = req.body;
-      // const jobData = {
-      //   jobId: id,
-      //   ...data,
-      //   appliedAt: new Date(),
-      // };
       const result = await appliedCollection.insertOne(data);
       console.log(result);
       res.send(result);
