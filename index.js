@@ -50,6 +50,20 @@ async function run() {
         res.status(500).json({ message: "Not Found Data", error: error });
       }
     });
+    // add job delete by id
+    app.delete("/jobs/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await jobsCollection.deleteOne(query);
+      res.send(result);
+    });
+    //  /viewApplication/job/:jobId
+    app.get("/viewApplication/job/:jobId", async (req, res) => {
+      const jobId = req.params.jobId;
+      const query = { jobId: jobId };
+      const result = await appliedCollection.find(query).toArray();
+      res.send(result);
+    });
     // singe job details get
     app.get("/jobs/:id", async (req, res) => {
       try {
