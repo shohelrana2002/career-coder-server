@@ -29,13 +29,27 @@ async function run() {
 
     app.get("/jobs", async (req, res) => {
       try {
-        const result = await jobsCollection.find().toArray();
+        const email = req.query.email;
+        const query = {};
+        if (email) {
+          query.hr_email = email;
+        }
+        const result = await jobsCollection.find(query).toArray();
         res.json({ message: "Data get Successfully", data: result });
       } catch (err) {
         res.status(500).json({ message: "Data Cant get ", error: err.message });
       }
     });
-
+    // jobs post
+    app.post("/jobs", async (req, res) => {
+      try {
+        const data = req.body;
+        const result = await jobsCollection.insertOne(data);
+        res.json(result);
+      } catch (error) {
+        res.status(500).json({ message: "Not Found Data", error: error });
+      }
+    });
     // singe job details get
     app.get("/jobs/:id", async (req, res) => {
       try {
@@ -102,7 +116,6 @@ async function run() {
     app.post("/applied", async (req, res) => {
       const data = req.body;
       const result = await appliedCollection.insertOne(data);
-      console.log(result);
       res.send(result);
     });
     // application delete by id
