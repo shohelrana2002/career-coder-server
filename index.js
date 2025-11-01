@@ -64,6 +64,20 @@ async function run() {
       const result = await appliedCollection.find(query).toArray();
       res.send(result);
     });
+    // count get add
+    app.get("/jobs/applications", async (req, res) => {
+      const email = req.query.email;
+      const query = { hr_email: email };
+      const jobs = await jobsCollection.find(query).toArray();
+      for (const job of jobs) {
+        const applicationQuery = { jobId: job._id.toString() };
+        const application_count = await appliedCollection.countDocuments(
+          applicationQuery
+        );
+        job.application_count = application_count;
+      }
+      res.send(jobs);
+    });
     // singe job details get
     app.get("/jobs/:id", async (req, res) => {
       try {
@@ -126,6 +140,20 @@ async function run() {
       const result = await appliedCollection.aggregate(pipeline).toArray();
       res.send(result);
     });
+
+    // applied status update route
+    app.patch("/application/:id", async (req, res) => {
+      const id = req.params.id;
+      const objectId = { _id: new ObjectId(id) };
+      const updateDoc = {
+        $set: {
+          status: req.body.status,
+        },
+      };
+      const result = await appliedCollection.updateOne(objectId, updateDoc);
+      res.send(result);
+    });
+
     // applied post by id
     app.post("/applied", async (req, res) => {
       const data = req.body;
