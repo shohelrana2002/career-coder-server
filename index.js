@@ -17,6 +17,22 @@ app.use(
 app.use(express.json());
 app.use(cookieParser());
 
+// middle were
+const verifyToken = (req, res, next) => {
+  const token = req?.cookies?.token;
+  if (!token) {
+    return res.status(401).send({ message: "Unauthorized access" });
+  }
+  // verify token
+  jwt.verify(token, process.env.JWT_SECRET_KEY, (err, decoded) => {
+    if (err) {
+      return res.status(401).send({ message: "Unauthorized access" });
+    }
+    req.decoded = decoded;
+    next();
+  });
+};
+
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.6zoig.mongodb.net/?appName=Cluster0`;
 
 const client = new MongoClient(uri, {
@@ -87,8 +103,11 @@ async function run() {
       res.send(result);
     });
     // count get add
-    app.get("/jobs/applications", async (req, res) => {
+    app.get("/jobs/applications", verifyToken, async (req, res) => {
       const email = req.query.email;
+      if (email !== req.decoded.email) {
+        return res.status(403).send({ message: "forbidden" });
+      }
       const query = { hr_email: email };
       const jobs = await jobsCollection.find(query).toArray();
       for (const job of jobs) {
@@ -112,9 +131,12 @@ async function run() {
       }
     });
     //  get application
-    app.get("/application", async (req, res) => {
+    app.get("/application", verifyToken, async (req, res) => {
       try {
         const email = req.query.email;
+        if (email !== req.decoded.email) {
+          return res.status(403).send({ message: "forbidden" });
+        }
         const match = email ? { $match: { email } } : { $match: {} };
 
         const pipeline = [
