@@ -1,12 +1,21 @@
 const express = require("express");
 const cors = require("cors");
 const app = express();
+const jwt = require("jsonwebtoken");
+const cookieParser = require("cookie-parser");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 require("dotenv").config();
-
-app.use(cors());
-app.use(express.json());
 const port = process.env.PORT || 4000;
+
+// middle were
+app.use(
+  cors({
+    origin: ["http://localhost:5173"],
+    credentials: true,
+  })
+);
+app.use(express.json());
+app.use(cookieParser());
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.6zoig.mongodb.net/?appName=Cluster0`;
 
@@ -26,7 +35,20 @@ async function run() {
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
     );
+    // jwt api related
+    app.post("/jwt", async (req, res) => {
+      const userData = req.body;
+      const token = jwt.sign(userData, process.env.JWT_SECRET_KEY, {
+        expiresIn: "7d",
+      });
+      //   set the token in  cookie
+      res.cookie("token", token, {
+        httpOnly: true,
+        secure: false,
+      });
 
+      res.send({ success: true });
+    });
     app.get("/jobs", async (req, res) => {
       try {
         const email = req.query.email;
@@ -89,56 +111,58 @@ async function run() {
         res.status(500).json({ message: "Data not found", error: err.message });
       }
     });
-    // // applied get
-    // app.get("/application", async (req, res) => {
-    //   const email = req.query.email;
-    //   const query = { email };
-    //   const result = await appliedCollection.find(query).toArray();
-    //   // bad way to get id
-    //   for (const application of result) {
-    //     const jobId = application.jobId;
-    //     const queryJobId = { _id: new ObjectId(jobId) };
-    //     const job = await jobsCollection.findOne(queryJobId);
-    //     application.company = job.company;
-    //     application.title = job.title;
-    //     application.company_logo = job.company_logo;
-    //   }
-    //   res.send(result);
-    // });
-
+    //  get application
     app.get("/application", async (req, res) => {
-      const email = req.query.email;
-      const match = email ? { $match: { email } } : { $match: {} };
-      const pipeline = [
-        match,
-        {
-          $addFields: {
-            jobObjId: { $toObjectId: "$jobId" },
+      try {
+        const email = req.query.email;
+        const match = email ? { $match: { email } } : { $match: {} };
+
+        const pipeline = [
+          match,
+          {
+            $addFields: {
+              jobObjId: {
+                $cond: {
+                  if: {
+                    $regexMatch: {
+                      input: "$jobId",
+                      regex: /^[0-9a-fA-F]{24}$/,
+                    },
+                  },
+                  then: { $toObjectId: "$jobId" },
+                  else: null,
+                },
+              },
+            },
           },
-        },
-        {
-          $lookup: {
-            from: "jobs",
-            localField: "jobObjId",
-            foreignField: "_id",
-            as: "job",
+          {
+            $lookup: {
+              from: "jobs",
+              localField: "jobObjId",
+              foreignField: "_id",
+              as: "job",
+            },
           },
-        },
-        {
-          $unwind: { path: "$job", preserveNullAndEmptyArrays: true },
-        },
-        {
-          $project: {
-            jobId: 1,
-            email: 1,
-            company: "$job.company",
-            title: "$job.title",
-            company_logo: "$job.company_logo",
+          {
+            $unwind: { path: "$job", preserveNullAndEmptyArrays: true },
           },
-        },
-      ];
-      const result = await appliedCollection.aggregate(pipeline).toArray();
-      res.send(result);
+          {
+            $project: {
+              jobId: 1,
+              email: 1,
+              company: "$job.company",
+              title: "$job.title",
+              company_logo: "$job.company_logo",
+            },
+          },
+        ];
+
+        const result = await appliedCollection.aggregate(pipeline).toArray();
+        res.send(result);
+      } catch (error) {
+        console.error("Aggregation Error:", error);
+        res.status(500).send({ message: "Error fetching applications" });
+      }
     });
 
     // applied status update route
