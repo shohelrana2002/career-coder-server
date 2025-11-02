@@ -1,7 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const app = express();
-const jwt = require("jsonwebtoken");
+// const jwt = require("jsonwebtoken");
 const cookieParser = require("cookie-parser");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 require("dotenv").config();
@@ -15,23 +15,31 @@ app.use(
   })
 );
 app.use(express.json());
-app.use(cookieParser());
+// app.use(cookieParser());
 
 // middle were
-const verifyToken = (req, res, next) => {
-  const token = req?.cookies?.token;
-  if (!token) {
-    return res.status(401).send({ message: "Unauthorized access" });
-  }
-  // verify token
-  jwt.verify(token, process.env.JWT_SECRET_KEY, (err, decoded) => {
-    if (err) {
-      return res.status(401).send({ message: "Unauthorized access" });
-    }
-    req.decoded = decoded;
-    next();
-  });
-};
+// const verifyToken = (req, res, next) => {
+//   const token = req?.cookies?.token;
+//   if (!token) {
+//     return res.status(401).send({ message: "Unauthorized access" });
+//   }
+//   // verify token
+//   jwt.verify(token, process.env.JWT_SECRET_KEY, (err, decoded) => {
+//     if (err) {
+//       return res.status(401).send({ message: "Unauthorized access" });
+//     }
+//     req.decoded = decoded;
+//     next();
+//   });
+// };
+
+var admin = require("firebase-admin");
+
+var serviceAccount = require("./firebase-admin.json");
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+});
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.6zoig.mongodb.net/?appName=Cluster0`;
 
@@ -52,19 +60,21 @@ async function run() {
       "Pinged your deployment. You successfully connected to MongoDB!"
     );
     // jwt api related
-    app.post("/jwt", async (req, res) => {
-      const userData = req.body;
-      const token = jwt.sign(userData, process.env.JWT_SECRET_KEY, {
-        expiresIn: "7d",
-      });
-      //   set the token in  cookie
-      res.cookie("token", token, {
-        httpOnly: true,
-        secure: false,
-      });
+    // app.post("/jwt", async (req, res) => {
+    //   const userData = req.body;
+    //   const token = jwt.sign(userData, process.env.JWT_SECRET_KEY, {
+    //     expiresIn: "7d",
+    //   });
+    //   //   set the token in  cookie
+    //   res.cookie("token", token, {
+    //     httpOnly: true,
+    //     secure: false,
+    //   });
 
-      res.send({ success: true });
-    });
+    //   res.send({ success: true });
+    // });
+
+    // get jobs
     app.get("/jobs", async (req, res) => {
       try {
         const email = req.query.email;
@@ -103,11 +113,8 @@ async function run() {
       res.send(result);
     });
     // count get add
-    app.get("/jobs/applications", verifyToken, async (req, res) => {
+    app.get("/jobs/applications", async (req, res) => {
       const email = req.query.email;
-      if (email !== req.decoded.email) {
-        return res.status(403).send({ message: "forbidden" });
-      }
       const query = { hr_email: email };
       const jobs = await jobsCollection.find(query).toArray();
       for (const job of jobs) {
@@ -131,12 +138,10 @@ async function run() {
       }
     });
     //  get application
-    app.get("/application", verifyToken, async (req, res) => {
+    app.get("/application", async (req, res) => {
       try {
         const email = req.query.email;
-        if (email !== req.decoded.email) {
-          return res.status(403).send({ message: "forbidden" });
-        }
+        console.log(req.headers.authorization);
         const match = email ? { $match: { email } } : { $match: {} };
 
         const pipeline = [
