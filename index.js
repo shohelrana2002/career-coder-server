@@ -3,6 +3,10 @@ const cors = require("cors");
 const app = express();
 // const jwt = require("jsonwebtoken");
 const cookieParser = require("cookie-parser");
+
+const admin = require("firebase-admin");
+const serviceAccount = require("./firebase-admin.json");
+
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 require("dotenv").config();
 const port = process.env.PORT || 4000;
@@ -33,10 +37,7 @@ app.use(express.json());
 //   });
 // };
 
-var admin = require("firebase-admin");
-
-var serviceAccount = require("./firebase-admin.json");
-
+// firebase admin initialize
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
 });
@@ -50,8 +51,34 @@ const client = new MongoClient(uri, {
     deprecationErrors: true,
   },
 });
+
 const jobsCollection = client.db("CareerCoders").collection("jobs");
 const appliedCollection = client.db("CareerCoders").collection("applied");
+
+// middle were
+const verifyFirebaseToken = async (req, res, next) => {
+  const authHeder = req?.headers?.authorization;
+  if (!authHeder || !authHeder?.startsWith("Bearer ")) {
+    return res.status(401).send({ message: "unauthorized access" });
+  }
+  const token = authHeder.split(" ")[1];
+
+  try {
+    const decoded = await admin.auth().verifyIdToken(token);
+    req.decoded = decoded;
+    next();
+  } catch (error) {
+    return res
+      .status(401)
+      .send({ message: "unauthorized access", error: error });
+  }
+};
+const verifyEmail = (req, res, next) => {
+  if (req?.query?.email !== req?.decoded?.email) {
+    return res.status(403).send({ message: "forbidden access" });
+  }
+  next();
+};
 async function run() {
   try {
     await client.connect();
@@ -113,19 +140,24 @@ async function run() {
       res.send(result);
     });
     // count get add
-    app.get("/jobs/applications", async (req, res) => {
-      const email = req.query.email;
-      const query = { hr_email: email };
-      const jobs = await jobsCollection.find(query).toArray();
-      for (const job of jobs) {
-        const applicationQuery = { jobId: job._id.toString() };
-        const application_count = await appliedCollection.countDocuments(
-          applicationQuery
-        );
-        job.application_count = application_count;
+    app.get(
+      "/jobs/applications",
+      verifyFirebaseToken,
+      verifyEmail,
+      async (req, res) => {
+        const email = req.query.email;
+        const query = { hr_email: email };
+        const jobs = await jobsCollection.find(query).toArray();
+        for (const job of jobs) {
+          const applicationQuery = { jobId: job._id.toString() };
+          const application_count = await appliedCollection.countDocuments(
+            applicationQuery
+          );
+          job.application_count = application_count;
+        }
+        res.send(jobs);
       }
-      res.send(jobs);
-    });
+    );
     // singe job details get
     app.get("/jobs/:id", async (req, res) => {
       try {
@@ -138,59 +170,63 @@ async function run() {
       }
     });
     //  get application
-    app.get("/application", async (req, res) => {
-      try {
-        const email = req.query.email;
-        console.log(req.headers.authorization);
-        const match = email ? { $match: { email } } : { $match: {} };
+    app.get(
+      "/application",
+      verifyFirebaseToken,
+      verifyEmail,
+      async (req, res) => {
+        try {
+          const email = req.query.email;
+          const match = email ? { $match: { email } } : { $match: {} };
 
-        const pipeline = [
-          match,
-          {
-            $addFields: {
-              jobObjId: {
-                $cond: {
-                  if: {
-                    $regexMatch: {
-                      input: "$jobId",
-                      regex: /^[0-9a-fA-F]{24}$/,
+          const pipeline = [
+            match,
+            {
+              $addFields: {
+                jobObjId: {
+                  $cond: {
+                    if: {
+                      $regexMatch: {
+                        input: "$jobId",
+                        regex: /^[0-9a-fA-F]{24}$/,
+                      },
                     },
+                    then: { $toObjectId: "$jobId" },
+                    else: null,
                   },
-                  then: { $toObjectId: "$jobId" },
-                  else: null,
                 },
               },
             },
-          },
-          {
-            $lookup: {
-              from: "jobs",
-              localField: "jobObjId",
-              foreignField: "_id",
-              as: "job",
+            {
+              $lookup: {
+                from: "jobs",
+                localField: "jobObjId",
+                foreignField: "_id",
+                as: "job",
+              },
             },
-          },
-          {
-            $unwind: { path: "$job", preserveNullAndEmptyArrays: true },
-          },
-          {
-            $project: {
-              jobId: 1,
-              email: 1,
-              company: "$job.company",
-              title: "$job.title",
-              company_logo: "$job.company_logo",
+            {
+              $unwind: { path: "$job", preserveNullAndEmptyArrays: true },
             },
-          },
-        ];
+            {
+              $project: {
+                jobId: 1,
+                email: 1,
+                company: "$job.company",
+                title: "$job.title",
+                company_logo: "$job.company_logo",
+              },
+            },
+          ];
 
-        const result = await appliedCollection.aggregate(pipeline).toArray();
-        res.send(result);
-      } catch (error) {
-        console.error("Aggregation Error:", error);
-        res.status(500).send({ message: "Error fetching applications" });
+          const result = await appliedCollection.aggregate(pipeline).toArray();
+          res.send(result);
+        } catch (error) {
+          console.error("Aggregation Error:", error);
+          res.status(500).send({ message: "Error fetching applications" });
+        }
       }
-    });
+    );
 
     // applied status update route
     app.patch("/application/:id", async (req, res) => {
