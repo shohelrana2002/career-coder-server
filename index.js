@@ -5,7 +5,10 @@ const app = express();
 const cookieParser = require("cookie-parser");
 
 const admin = require("firebase-admin");
-const serviceAccount = require("./firebase-admin.json");
+const decoded = Buffer.from(process.env.FB_SERVICE_KEY, "base64").toString(
+  "utf8"
+);
+const serviceAccount = JSON.parse(decoded);
 
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 require("dotenv").config();
@@ -14,7 +17,11 @@ const port = process.env.PORT || 4000;
 // middle were
 app.use(
   cors({
-    origin: ["http://localhost:5173"],
+    origin: [
+      "http://localhost:5173",
+      "https://carear-coder.web.app",
+      "https://carear-coder.firebaseapp.com",
+    ],
     credentials: true,
   })
 );
@@ -57,7 +64,7 @@ const appliedCollection = client.db("CareerCoders").collection("applied");
 
 // middle were
 const verifyFirebaseToken = async (req, res, next) => {
-  const authHeder = req?.headers?.authorization;
+  const authHeder = req.headers.authorization;
   if (!authHeder || !authHeder?.startsWith("Bearer ")) {
     return res.status(401).send({ message: "unauthorized access" });
   }
@@ -81,11 +88,6 @@ const verifyEmail = (req, res, next) => {
 };
 async function run() {
   try {
-    await client.connect();
-    await client.db("admin").command({ ping: 1 });
-    console.log(
-      "Pinged your deployment. You successfully connected to MongoDB!"
-    );
     // jwt api related
     // app.post("/jwt", async (req, res) => {
     //   const userData = req.body;
@@ -254,6 +256,11 @@ async function run() {
       const result = await appliedCollection.deleteOne(queryId);
       res.send(result);
     });
+    // await client.connect();
+    // await client.db("admin").command({ ping: 1 });
+    // console.log(
+    //   "Pinged your deployment. You successfully connected to MongoDB!"
+    // );
   } finally {
     // await client.close();
   }
